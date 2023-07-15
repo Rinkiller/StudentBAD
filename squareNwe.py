@@ -110,7 +110,7 @@ class Square_New:
 
 
 kvadr = Square_New(5)
-priam = Square_New(10, 6)
+priam = Square_New(100, 6)
 print(kvadr)
 print(priam)
 kvadr.a = 12

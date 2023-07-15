@@ -5,18 +5,40 @@
     Также экземпляр должен сообщать средний балл по тестам для каждого предмета и по оценкам всех предметов вместе взятых."""
 
 
+
+import csv
+import os
+
+
+class ErrorStudent(Exception):
+    """Общий класс обработчик ошибок СУБД СТУДЕНТ"""
+    pass
+
+class ErrorStudentFileDtaNotFound(ErrorStudent):
+    """Класс обработчик ошибок файла данных СУБД СТУДЕНТ"""
+    def __init__(self) -> None:
+        super().__init__('Ошибка 404!!! фаил базы данных dat.csv ненайден!!!!')
+
+class ErrorStudentValue(ErrorStudent):
+    """Класс обработчик ошибок ввода данных СУБД СТУДЕНТ"""
+    def __init__(self , string_eror:str) -> None:
+        super().__init__('Ошибка входных данных !!! '+ string_eror)
+        #return 'Ошибка входных данных :'+ string_eror
+
+
 class FIO:
     """Класс дескриптор для проверки ФИО на первую заглавную букву и наличие только букв"""
 
     def __set_name__(self, owner, name):
-        self.param_name = name
+        self.param_name = 'S' + name
 
-    def __set__(self, instance, value: str):
+    def __set__(self, instance, value:str):   
+        for ch in value:
+            if not ch.isalpha():
+                raise ErrorStudentValue(f'Значение ({value}) должно состоять только из букв!')
         if not str.istitle(value):
-            raise ValueError(f'Bad {value}')
-        for char in value:
-                if not char.isalpha():
-                    raise ValueError(f'Bad {value}')
+            raise ErrorStudentValue(f'Значение ({value}) должно начинаться с заглавной буквы!')
+        
         setattr(instance, self.param_name, value)
         
 
@@ -25,60 +47,90 @@ class FIO:
 
 
 class Ocenka:
-    def __init__(self, min: int = None, max: int = None) -> None:
-        if min > max:
-            min, max = max, min
-        self.min = min
-        self.max = max
+    def __init__(self , min : int = 0 , max : int = 1) -> None:
+        if not min: 
+            self.min  = 0
+        else:
+            self.min = min
+        if not max: 
+            self.max  = 1 
+        else:
+            self.max = max
 
     def __set_name__(self, owner, name):
-        self.param_name = name
+        self.param_name = 'S' + name
 
     def __get__(self, instance, owner):
         return getattr(instance, self.param_name)
-    
-    # def __set__(self, instance, value):
-    #     if not isinstance(value, int):
-    #         raise TypeError(f'Значение {value} должно быть целым числом')
-    #     if self.min is not None and value < self.min:
-    #         raise ValueError(f'Значение {value} должно быть больше 18 или равно {self.min}')
-    #     if self.max is not None and value >= self.max:
-    #         raise ValueError(f'Значение {value} должно быть меньше {self.max}')
-    #     setattr(instance, self.param_name, value)
 
     def __set__(self, instance, value):
         if not isinstance(value, int):
-            raise TypeError(f'Значение {value} должно быть целым числом')
-        if self.min is not None and value < self.min:
-            raise ValueError(
-                f'Значение {value} должно быть больше или равно {self.min}')
-        if self.max is not None and value > self.max:
-            raise ValueError(
-                f'Значение {value} должно быть меньше или равно {self.max}')
+            raise ErrorStudentValue(f'Значение {value} должно быть целым числом')
+        if  value < self.min:
+            raise ErrorStudentValue(f'Значение {value} должно быть больше или равно {self.min}')
+        if value > self.max:
+            raise ErrorStudentValue(f'Значение {value} должно быть меньше или равно {self.max}')
         setattr(instance, self.param_name, value)
 
 
 class Student:
-    """Класс Учись студент Кто не работает тот ЕСТ"""
-    first_name = FIO
-    name = FIO
-    last_name = FIO
-    num = int#Ocenka(2,5)
+    """Класс Учись студент!!! Кто не работает тот ЕСТ"""
+    first_name = FIO()
+    name = FIO()
+    last_name = FIO()
+    __student_diary = {}     #dict[Ocenka(2 , 4) , tuple[int , dict[str , Ocenka(0 , 100)]]]
 
-    def __init__(self, first_name, name, last_name , num) -> None:
+    def __init__(self, first_name, name, last_name) -> None:
         self.first_name = first_name
         self.name = name
         self.last_name = last_name
-        self.num = num
+        if os.path.exists('dat.csv'):
+            reader = csv.reader(open('dat.csv' , 'r', newline='' , encoding='utf-8') ,dialect='excel',quoting=csv.QUOTE_ALL)
+            count = 0
+            list_key = []
+            list_val = []
+            for row  in reader:
+                if not count:
+                    list_key = row
+                else:
+                    if row:
+                        list_val = row
+                count += 1
+            result_list_lav = []
+            
+            for element in list_val:    #element = "[4, {'test1': 45, 'test2': 100}]"
+                worc_str = element[1:-1] #worc_str = "4, {'test1': 45, 'test2': 100}"
+                str_lis_of_tests = worc_str[4:-1].split(', ') # str_lis_of_tests = ''test1': 45, 'test2': 100'
+                line_dict = {}
+                for el in str_lis_of_tests:
+                    line_dict[el.split(':')[0][1:-1]] = int(el.split(':')[1][1:]) # line_dict = {'test1': 45, 'test2': 100}  
+                result_list_lav.append((int(worc_str[0]), line_dict))# добавили 4 (оценка от 2 - 5) и {'test1': 45, 'test2': 100}
+            for (key , value) in zip(list_key, result_list_lav):
+                self.__student_diary[key] =  value
+        else:
+            raise ErrorStudentFileDtaNotFound
 
+    @property            
+    def get_full_name(self) -> str:            
+        return f'{self.first_name} {self.name} {self.last_name}'       
+    #Также экземпляр должен сообщать средний балл по тестам для каждого предмета и по оценкам всех предметов вместе взятых.
+    
+    @property
+    def get_student_diarySTR(self) -> str:
+        return f'{self.__student_diary}'
     def __str__(self) -> str:
-        return f'Студент : {self.first_name} {self.name} {self.last_name}'
+        return f'Студент : {self.first_name} {self.name} {self.last_name}\n\Предметы: { [(key ,val) for key ,val in self.__student_diary.items()]} '
+    @property
+    def get_student_diaryDICT(self) -> dict:
+        return self.__student_diary
 
 
-PETIA = Student('иванов', 'Петр', 'Горлович' , 3)
+PETIA = Student('Иванов', 'Петр', 'Горлович')
 print(PETIA)
 
-if str.istitle('Uорлович'):
-    print(1)
-else:
-    print(None)
+#print(PETIA.get_student_diarySTR)
+#IBRAGIM = Student('Гвинодзе', 'Ибрагим', 'Рафикович')
+#print(PETIA.__students_diary['математика'][1]['test2'])
+# print(PETIA.get_full_name)
+#print(IBRAGIM)
+#print(type(PETIA.get_student_diaryDICT['математика'][1]['test1']))
